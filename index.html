@@ -155,9 +155,11 @@
     border-radius: 10px; overflow: hidden; transition: border-color 0.15s;
   }
   .card:hover { border-color: var(--line-strong); }
+  .card.completo { opacity: 0.72; }
+  .card.completo:hover { opacity: 1; }
   .card-head {
     display: grid;
-    grid-template-columns: 1fr auto auto auto;
+    grid-template-columns: 1fr auto auto auto auto;
     gap: 16px; padding: 18px 22px; align-items: center;
     cursor: pointer;
   }
@@ -171,6 +173,25 @@
     font-family: var(--mono); font-size: 16px; font-weight: 600;
     color: var(--ink);
   }
+  .next-date {
+    display: flex; flex-direction: column; align-items: flex-end;
+    gap: 2px; min-width: 110px;
+  }
+  .next-date .label {
+    font-family: var(--mono); font-size: 9px; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--ink-mute);
+  }
+  .next-date .value {
+    font-family: var(--mono); font-size: 13px; font-weight: 600;
+    color: var(--ink); white-space: nowrap;
+  }
+  .next-date .days {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--ink-mute); letter-spacing: 0.04em;
+  }
+  .next-date.urgente .value { color: var(--amber); }
+  .next-date.vencido .value { color: var(--red); }
+  .next-date.vencido .days { color: var(--red); font-weight: 600; }
   .progress {
     font-family: var(--mono); font-size: 11px; color: var(--ink-mute);
     text-align: right; min-width: 80px;
@@ -280,8 +301,10 @@
 
   @media (max-width: 700px) {
     .app { padding: 20px 14px 60px; }
-    .card-head { grid-template-columns: 1fr auto; gap: 8px; }
+    .card-head { grid-template-columns: 1fr auto; gap: 8px 12px; }
     .progress, .card-amount { grid-column: 1 / -1; text-align: left; }
+    .next-date { align-items: flex-start; min-width: 0; grid-column: 1 / -1; flex-direction: row; gap: 8px; flex-wrap: wrap; }
+    .next-date .label { display: none; }
     .quota { grid-template-columns: 40px 1fr auto; }
     .quota .field:nth-child(3), .quota .field:nth-child(4) { grid-column: 2 / -1; }
     .form-grid { grid-template-columns: 1fr; }
@@ -298,11 +321,42 @@ const { useState, useEffect, useMemo } = React;
 const fmtCLP = n => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n || 0);
 const fmtNum = n => new Intl.NumberFormat('es-CL').format(n || 0);
 const fmtFecha = f => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const fmtFechaCorta = f => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: 'short' }) : '—';
 const hoyISO = () => new Date().toISOString().split('T')[0];
 
 const estaVencido = (fechaCobro, estado) => {
   if (estado === 'cobrado' || !fechaCobro) return false;
   return fechaCobro < hoyISO();
+};
+
+// Días entre dos fechas ISO (positivo = futuro, negativo = pasado)
+const diasHasta = fechaISO => {
+  if (!fechaISO) return null;
+  const hoy = new Date(hoyISO() + 'T12:00:00');
+  const f = new Date(fechaISO + 'T12:00:00');
+  return Math.round((f - hoy) / (1000 * 60 * 60 * 24));
+};
+
+// Fecha del próximo cheque pendiente (la más cercana entre los no cobrados).
+// Si todos están cobrados, retorna null.
+const proximaFechaPendiente = pago => {
+  const cuotas = pago.cuotas || [];
+  const pendientes = cuotas
+    .filter(c => c.estado !== 'cobrado' && c.fechaCobro)
+    .map(c => c.fechaCobro)
+    .sort();
+  return pendientes[0] || null;
+};
+
+// Texto relativo para la fecha próxima ("hoy", "mañana", "en 5 días", "hace 3 días")
+const textoRelativo = fechaISO => {
+  const d = diasHasta(fechaISO);
+  if (d === null) return '';
+  if (d === 0) return 'hoy';
+  if (d === 1) return 'mañana';
+  if (d === -1) return 'ayer';
+  if (d > 0) return `en ${d} días`;
+  return `hace ${Math.abs(d)} días`;
 };
 
 // ===== App =====
@@ -358,9 +412,9 @@ function App() {
     return { totalPendiente, totalCobrado, totalVencido, chequesPendientes, chequesCobrados };
   }, [pagos]);
 
-  // === Filtrado ===
+  // === Filtrado + Ordenamiento ===
   const pagosFiltrados = useMemo(() => {
-    return pagos.filter(p => {
+    const filtrados = pagos.filter(p => {
       // Filtro búsqueda
       if (busqueda) {
         const q = busqueda.toLowerCase();
@@ -390,6 +444,28 @@ function App() {
         return cuotas.some(c => estaVencido(c.fechaCobro, c.estado));
       }
       return true;
+    });
+
+    // Orden:
+    // 1) Pagos con cheques pendientes primero, ordenados por fecha del próximo cheque (asc)
+    // 2) Pagos completamente cobrados al final, ordenados por fecha del último cheque cobrado (desc)
+    return filtrados.sort((a, b) => {
+      const proxA = proximaFechaPendiente(a);
+      const proxB = proximaFechaPendiente(b);
+
+      // Si uno está completo y el otro no, el completo va al final
+      if (!proxA && proxB) return 1;
+      if (proxA && !proxB) return -1;
+
+      // Ambos pendientes → orden ascendente por fecha próxima
+      if (proxA && proxB) {
+        return proxA.localeCompare(proxB);
+      }
+
+      // Ambos completos → ordenar por última fecha cobrada descendente (más reciente arriba)
+      const ultA = (a.cuotas || []).map(c => c.fechaCobroReal || c.fechaCobro).filter(Boolean).sort().pop() || '';
+      const ultB = (b.cuotas || []).map(c => c.fechaCobroReal || c.fechaCobro).filter(Boolean).sort().pop() || '';
+      return ultB.localeCompare(ultA);
     });
   }, [pagos, filtroEstado, busqueda, filtroMes]);
 
@@ -482,6 +558,7 @@ function App() {
         'Monto Total': totalPago,
         'Monto Cobrado': cobrado,
         'Monto Pendiente': totalPago - cobrado,
+        'Próximo Cobro': proximaFechaPendiente(p) || '',
         'Estado': cuotas.length > 0 && cuotas.every(c => c.estado === 'cobrado') ? 'COBRADO COMPLETO' : 'PENDIENTE'
       };
     });
@@ -636,13 +713,35 @@ function PagoCard({ pago, expandido, onToggle, onEditar, onEliminar, onCambiarEs
   const pct = cuotas.length ? (cobradas / cuotas.length) * 100 : 0;
   const completo = cuotas.length > 0 && cobradas === cuotas.length;
 
+  // Próximo cheque pendiente
+  const proxFecha = proximaFechaPendiente(pago);
+  const dias = diasHasta(proxFecha);
+  const proxVencido = proxFecha && proxFecha < hoyISO();
+  const proxUrgente = dias !== null && dias >= 0 && dias <= 7;
+  const nextDateCls = proxVencido ? 'vencido' : (proxUrgente ? 'urgente' : '');
+
   return (
-    <div className="card">
+    <div className={`card ${completo ? 'completo' : ''}`}>
       <div className="card-head" onClick={onToggle}>
         <div className="card-info">
           <h3>{pago.beneficiario || 'Sin beneficiario'}</h3>
           {pago.concepto && <div className="desc">{pago.concepto}</div>}
         </div>
+
+        {/* Fecha del próximo cheque (solo si hay pendientes) */}
+        {proxFecha ? (
+          <div className={`next-date ${nextDateCls}`}>
+            <span className="label">Próximo cobro</span>
+            <span className="value">{fmtFechaCorta(proxFecha)}</span>
+            <span className="days">{textoRelativo(proxFecha)}</span>
+          </div>
+        ) : (
+          <div className="next-date">
+            <span className="label">Estado</span>
+            <span className="value" style={{color: 'var(--green)'}}>✓ Completo</span>
+          </div>
+        )}
+
         <div className="card-amount">{fmtCLP(total)}</div>
         <div className="progress">
           {cobradas}/{cuotas.length} cheques
