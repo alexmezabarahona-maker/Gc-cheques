@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gestión de Cheques · GC Climatización</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc,
+    serverTimestamp, query, orderBy
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  // ===== CONFIGURACIÓN FIREBASE =====
+  const firebaseConfig = {
+    apiKey: "AIzaSyBUCGrhJJ1poiDOWxoMm_sNkgEzTnjOZKk",
+    authDomain: "gc-cheques.firebaseapp.com",
+    projectId: "gc-cheques",
+    storageBucket: "gc-cheques.firebasestorage.app",
+    messagingSenderId: "397768997919",
+    appId: "1:397768997919:web:88de37e450b97ace40e92a"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  window.fb = { db, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, query, orderBy };
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
+<style>
+  :root {
+    --bg: #f5f3ee;
+    --bg-card: #ffffff;
+    --bg-elev: #faf8f3;
+    --ink: #1a1a1a;
+    --ink-soft: #4a4a4a;
+    --ink-mute: #8a8680;
+    --line: #e6e2d8;
+    --line-strong: #d4cfc1;
+    --accent: #1a1a1a;
+    --accent-warm: #b45309;
+    --green: #15803d;
+    --green-bg: #ecfdf5;
+    --amber: #b45309;
+    --amber-bg: #fef3c7;
+    --red: #991b1b;
+    --red-bg: #fee2e2;
+    --serif: 'Fraunces', Georgia, serif;
+    --sans: 'Inter Tight', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background-image:
+      radial-gradient(at 0% 0%, rgba(180, 83, 9, 0.04) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(21, 128, 61, 0.03) 0px, transparent 50%);
+    min-height: 100vh;
+  }
+  .app { max-width: 1400px; margin: 0 auto; padding: 32px 24px 80px; }
+  header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 24px; border-bottom: 1px solid var(--line); margin-bottom: 32px;
+    flex-wrap: wrap; gap: 16px;
+  }
+  .brand h1 {
+    font-family: var(--serif); font-weight: 600;
+    font-size: clamp(28px, 4vw, 42px);
+    letter-spacing: -0.02em; line-height: 1;
+  }
+  .brand .sub {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink-mute); text-transform: uppercase; letter-spacing: 0.15em;
+    margin-top: 8px;
+  }
+  .header-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+  button {
+    font-family: var(--sans); font-size: 13px; font-weight: 500;
+    border: 1px solid var(--line-strong); background: var(--bg-card);
+    color: var(--ink); padding: 9px 16px; border-radius: 6px;
+    cursor: pointer; transition: all 0.15s ease;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  button:hover { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  button.primary:hover { background: #333; }
+  button.ghost { border-color: transparent; background: transparent; }
+  button.ghost:hover { background: var(--line); color: var(--ink); }
+  button.danger:hover { background: var(--red); color: white; border-color: var(--red); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px; margin-bottom: 32px;
+  }
+  .stat {
+    background: var(--bg-card); border: 1px solid var(--line);
+    border-radius: 8px; padding: 18px 20px;
+    position: relative; overflow: hidden;
+  }
+  .stat .label {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--ink-mute); margin-bottom: 8px;
+  }
+  .stat .value {
+    font-family: var(--serif); font-size: 28px; font-weight: 600;
+    letter-spacing: -0.02em; line-height: 1.1;
+  }
+  .stat .meta { font-size: 11px; color: var(--ink-mute); margin-top: 4px; }
+  .stat.amber .value { color: var(--amber); }
+  .stat.green .value { color: var(--green); }
+  .stat::before {
+    content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%;
+    background: var(--ink);
+  }
+  .stat.amber::before { background: var(--amber); }
+  .stat.green::before { background: var(--green); }
+
+  .toolbar {
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  .toolbar input, .toolbar select {
+    font-family: var(--sans); font-size: 13px;
+    background: var(--bg-card); border: 1px solid var(--line);
+    padding: 8px 12px; border-radius: 6px; color: var(--ink);
+    min-width: 140px;
+  }
+  .toolbar input:focus, .toolbar select:focus { outline: none; border-color: var(--ink); }
+  .filter-group { display: inline-flex; gap: 4px; background: var(--bg-card); padding: 4px; border-radius: 8px; border: 1px solid var(--line); }
+  .filter-group button {
+    border: none; background: transparent; padding: 6px 12px; font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .filter-group button.active { background: var(--ink); color: var(--bg); }
+  .filter-group button:hover:not(.active) { background: var(--line); color: var(--ink); }
+
+  .list { display: flex; flex-direction: column; gap: 12px; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--line);
+    border-radius: 10px; overflow: hidden; transition: border-color 0.15s;
+  }
+  .card:hover { border-color: var(--line-strong); }
+  .card-head {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    gap: 16px; padding: 18px 22px; align-items: center;
+    cursor: pointer;
+  }
+  .card-head:hover { background: var(--bg-elev); }
+  .card-info h3 {
+    font-family: var(--serif); font-size: 18px; font-weight: 600;
+    letter-spacing: -0.01em; line-height: 1.2;
+  }
+  .card-info .desc { font-size: 12px; color: var(--ink-mute); margin-top: 4px; }
+  .card-amount {
+    font-family: var(--mono); font-size: 16px; font-weight: 600;
+    color: var(--ink);
+  }
+  .progress {
+    font-family: var(--mono); font-size: 11px; color: var(--ink-mute);
+    text-align: right; min-width: 80px;
+  }
+  .progress-bar {
+    height: 4px; background: var(--line); border-radius: 2px; margin-top: 4px;
+    overflow: hidden;
+  }
+  .progress-bar-fill { height: 100%; background: var(--green); transition: width 0.3s; }
+
+  .card-body {
+    border-top: 1px solid var(--line); padding: 20px 22px;
+    background: var(--bg-elev);
+  }
+  .quotas { display: flex; flex-direction: column; gap: 8px; }
+  .quota {
+    display: grid;
+    grid-template-columns: 50px 1fr 1fr 1fr auto auto;
+    gap: 12px; align-items: center;
+    padding: 10px 14px; background: var(--bg-card);
+    border: 1px solid var(--line); border-radius: 6px;
+    font-size: 13px;
+  }
+  .quota.cobrado { background: var(--green-bg); border-color: #bbf7d0; }
+  .quota.vencido { background: var(--red-bg); border-color: #fecaca; }
+  .quota .num {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    color: var(--ink-soft);
+  }
+  .quota .field { display: flex; flex-direction: column; gap: 2px; }
+  .quota .field-label {
+    font-family: var(--mono); font-size: 9px; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--ink-mute);
+  }
+  .quota .field-value { font-size: 13px; color: var(--ink); }
+  .quota .field-value.amount { font-family: var(--mono); font-weight: 500; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: var(--mono); font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 4px 8px; border-radius: 4px;
+  }
+  .badge.pendiente { background: var(--amber-bg); color: var(--amber); }
+  .badge.cobrado { background: var(--green-bg); color: var(--green); }
+  .badge.vencido { background: var(--red-bg); color: var(--red); }
+
+  /* Modal */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(20, 18, 14, 0.5);
+    display: flex; justify-content: center; align-items: center;
+    z-index: 100; padding: 20px; backdrop-filter: blur(4px);
+  }
+  .modal {
+    background: var(--bg-card); border-radius: 12px;
+    max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto;
+    border: 1px solid var(--line);
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,0.2);
+  }
+  .modal-head {
+    padding: 24px 28px; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .modal-head h2 {
+    font-family: var(--serif); font-size: 24px; font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .modal-body { padding: 24px 28px; }
+  .modal-foot {
+    padding: 18px 28px; border-top: 1px solid var(--line);
+    display: flex; justify-content: flex-end; gap: 10px;
+  }
+  .form-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  .form-grid .full { grid-column: 1 / -1; }
+  .field-group { display: flex; flex-direction: column; gap: 6px; }
+  .field-group label {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--ink-mute); font-weight: 500;
+  }
+  .field-group input, .field-group select, .field-group textarea {
+    font-family: var(--sans); font-size: 14px;
+    background: var(--bg-elev); border: 1px solid var(--line);
+    padding: 10px 12px; border-radius: 6px; color: var(--ink);
+    transition: all 0.15s;
+  }
+  .field-group input:focus, .field-group select:focus, .field-group textarea:focus {
+    outline: none; border-color: var(--ink); background: var(--bg-card);
+  }
+  .field-group textarea { resize: vertical; min-height: 60px; }
+
+  .empty {
+    text-align: center; padding: 80px 20px; color: var(--ink-mute);
+  }
+  .empty h3 {
+    font-family: var(--serif); font-size: 22px; font-weight: 600;
+    color: var(--ink-soft); margin-bottom: 8px;
+  }
+
+  .actions-row { display: flex; gap: 6px; }
+  .icon-btn {
+    width: 30px; height: 30px; padding: 0; display: inline-flex;
+    align-items: center; justify-content: center; border-radius: 5px;
+    font-size: 14px;
+  }
+
+  @media (max-width: 700px) {
+    .app { padding: 20px 14px 60px; }
+    .card-head { grid-template-columns: 1fr auto; gap: 8px; }
+    .progress, .card-amount { grid-column: 1 / -1; text-align: left; }
+    .quota { grid-template-columns: 40px 1fr auto; }
+    .quota .field:nth-child(3), .quota .field:nth-child(4) { grid-column: 2 / -1; }
+    .form-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useMemo } = React;
+
+// ===== Helpers =====
+const fmtCLP = n => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n || 0);
+const fmtNum = n => new Intl.NumberFormat('es-CL').format(n || 0);
+const fmtFecha = f => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+const hoyISO = () => new Date().toISOString().split('T')[0];
+
+const estaVencido = (fechaCobro, estado) => {
+  if (estado === 'cobrado' || !fechaCobro) return false;
+  return fechaCobro < hoyISO();
+};
+
+// ===== App =====
+function App() {
+  const [pagos, setPagos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [fbListo, setFbListo] = useState(false);
+  const [modalAbierto, setModalAbierto] = useState(false);
+  const [pagoEditar, setPagoEditar] = useState(null);
+  const [expandidos, setExpandidos] = useState(new Set());
+  const [filtroEstado, setFiltroEstado] = useState('todos');
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroMes, setFiltroMes] = useState('');
+
+  useEffect(() => {
+    if (window.fb) { setFbListo(true); return; }
+    const handler = () => setFbListo(true);
+    window.addEventListener('firebase-ready', handler);
+    return () => window.removeEventListener('firebase-ready', handler);
+  }, []);
+
+  useEffect(() => {
+    if (!fbListo) return;
+    const { db, collection, onSnapshot, query, orderBy } = window.fb;
+    const q = query(collection(db, 'pagos_cheques'), orderBy('creado', 'desc'));
+    const unsub = onSnapshot(q, snap => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setPagos(data);
+      setCargando(false);
+    }, err => {
+      console.error(err);
+      setCargando(false);
+    });
+    return unsub;
+  }, [fbListo]);
+
+  // === Cálculos ===
+  const stats = useMemo(() => {
+    let totalPendiente = 0, totalCobrado = 0, totalVencido = 0;
+    let chequesPendientes = 0, chequesCobrados = 0;
+    pagos.forEach(p => {
+      (p.cuotas || []).forEach(c => {
+        if (c.estado === 'cobrado') {
+          totalCobrado += Number(c.monto || 0);
+          chequesCobrados++;
+        } else {
+          totalPendiente += Number(c.monto || 0);
+          chequesPendientes++;
+          if (estaVencido(c.fechaCobro, c.estado)) totalVencido += Number(c.monto || 0);
+        }
+      });
+    });
+    return { totalPendiente, totalCobrado, totalVencido, chequesPendientes, chequesCobrados };
+  }, [pagos]);
+
+  // === Filtrado ===
+  const pagosFiltrados = useMemo(() => {
+    return pagos.filter(p => {
+      // Filtro búsqueda
+      if (busqueda) {
+        const q = busqueda.toLowerCase();
+        const matches =
+          (p.beneficiario || '').toLowerCase().includes(q) ||
+          (p.concepto || '').toLowerCase().includes(q) ||
+          (p.cuotas || []).some(c => (c.numeroCheque || '').toString().toLowerCase().includes(q));
+        if (!matches) return false;
+      }
+      // Filtro mes (sobre cualquier cuota)
+      if (filtroMes) {
+        const tieneMes = (p.cuotas || []).some(c =>
+          c.fechaCobro && c.fechaCobro.startsWith(filtroMes)
+        );
+        if (!tieneMes) return false;
+      }
+      // Filtro estado
+      if (filtroEstado === 'todos') return true;
+      const cuotas = p.cuotas || [];
+      if (filtroEstado === 'pendiente') {
+        return cuotas.some(c => c.estado !== 'cobrado');
+      }
+      if (filtroEstado === 'cobrado') {
+        return cuotas.length > 0 && cuotas.every(c => c.estado === 'cobrado');
+      }
+      if (filtroEstado === 'vencido') {
+        return cuotas.some(c => estaVencido(c.fechaCobro, c.estado));
+      }
+      return true;
+    });
+  }, [pagos, filtroEstado, busqueda, filtroMes]);
+
+  // === Acciones ===
+  const toggleExpand = id => {
+    setExpandidos(prev => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
+  };
+
+  const abrirNuevo = () => { setPagoEditar(null); setModalAbierto(true); };
+  const abrirEditar = p => { setPagoEditar(p); setModalAbierto(true); };
+
+  const guardarPago = async data => {
+    const { db, collection, addDoc, doc, updateDoc, serverTimestamp } = window.fb;
+    try {
+      if (pagoEditar) {
+        await updateDoc(doc(db, 'pagos_cheques', pagoEditar.id), {
+          ...data,
+          actualizado: serverTimestamp()
+        });
+      } else {
+        await addDoc(collection(db, 'pagos_cheques'), {
+          ...data,
+          creado: serverTimestamp(),
+          actualizado: serverTimestamp()
+        });
+      }
+      setModalAbierto(false);
+      setPagoEditar(null);
+    } catch (e) {
+      alert('Error al guardar: ' + e.message);
+    }
+  };
+
+  const eliminarPago = async id => {
+    if (!confirm('¿Eliminar este pago completo y todos sus cheques?')) return;
+    const { db, doc, deleteDoc } = window.fb;
+    try { await deleteDoc(doc(db, 'pagos_cheques', id)); }
+    catch (e) { alert('Error: ' + e.message); }
+  };
+
+  const cambiarEstadoCuota = async (pago, idx, nuevoEstado) => {
+    const { db, doc, updateDoc, serverTimestamp } = window.fb;
+    const nuevasCuotas = pago.cuotas.map((c, i) => {
+      if (i !== idx) return c;
+      const actualizada = { ...c, estado: nuevoEstado };
+      if (nuevoEstado === 'cobrado') {
+        actualizada.fechaCobroReal = hoyISO();
+      } else {
+        delete actualizada.fechaCobroReal;
+      }
+      return actualizada;
+    });
+    try {
+      await updateDoc(doc(db, 'pagos_cheques', pago.id), {
+        cuotas: nuevasCuotas,
+        actualizado: serverTimestamp()
+      });
+    } catch (e) { alert('Error: ' + e.message); }
+  };
+
+  const editarCuota = async (pago, idx, campo, valor) => {
+    const { db, doc, updateDoc, serverTimestamp } = window.fb;
+    const nuevasCuotas = pago.cuotas.map((c, i) => i === idx ? { ...c, [campo]: valor } : c);
+    try {
+      await updateDoc(doc(db, 'pagos_cheques', pago.id), {
+        cuotas: nuevasCuotas,
+        actualizado: serverTimestamp()
+      });
+    } catch (e) { alert('Error: ' + e.message); }
+  };
+
+  // === Exportar Excel ===
+  const exportarExcel = () => {
+    if (pagos.length === 0) { alert('No hay datos para exportar.'); return; }
+
+    // Hoja 1: Resumen de pagos
+    const resumen = pagos.map(p => {
+      const cuotas = p.cuotas || [];
+      const totalPago = cuotas.reduce((a, c) => a + Number(c.monto || 0), 0);
+      const cobrado = cuotas.filter(c => c.estado === 'cobrado').reduce((a, c) => a + Number(c.monto || 0), 0);
+      return {
+        'Beneficiario': p.beneficiario || '',
+        'Concepto': p.concepto || '',
+        'Total Cheques': cuotas.length,
+        'Cheques Cobrados': cuotas.filter(c => c.estado === 'cobrado').length,
+        'Monto Total': totalPago,
+        'Monto Cobrado': cobrado,
+        'Monto Pendiente': totalPago - cobrado,
+        'Estado': cuotas.length > 0 && cuotas.every(c => c.estado === 'cobrado') ? 'COBRADO COMPLETO' : 'PENDIENTE'
+      };
+    });
+
+    // Hoja 2: Detalle por cheque
+    const detalle = [];
+    pagos.forEach(p => {
+      (p.cuotas || []).forEach((c, i) => {
+        detalle.push({
+          'Beneficiario': p.beneficiario || '',
+          'Concepto': p.concepto || '',
+          'Cuota': `${i + 1}/${p.cuotas.length}`,
+          'Nº Cheque': c.numeroCheque || '',
+          'Banco': c.banco || '',
+          'Monto': Number(c.monto || 0),
+          'Fecha Cobro Programada': c.fechaCobro || '',
+          'Fecha Cobro Real': c.fechaCobroReal || '',
+          'Estado': c.estado === 'cobrado' ? 'COBRADO' :
+                    estaVencido(c.fechaCobro, c.estado) ? 'VENCIDO' : 'PENDIENTE'
+        });
+      });
+    });
+
+    // Hoja 3: Totales
+    const totales = [
+      { 'Concepto': 'Total Cobrado', 'Monto': stats.totalCobrado, 'Cheques': stats.chequesCobrados },
+      { 'Concepto': 'Total Pendiente', 'Monto': stats.totalPendiente, 'Cheques': stats.chequesPendientes },
+      { 'Concepto': 'Total Vencido (incluido en pendiente)', 'Monto': stats.totalVencido, 'Cheques': '' },
+      { 'Concepto': 'TOTAL GENERAL', 'Monto': stats.totalCobrado + stats.totalPendiente, 'Cheques': stats.chequesCobrados + stats.chequesPendientes }
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen Pagos');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detalle), 'Detalle Cheques');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(totales), 'Totales');
+
+    const nombre = `Cheques_GC_${hoyISO()}.xlsx`;
+    XLSX.writeFile(wb, nombre);
+  };
+
+  if (!fbListo || cargando) {
+    return (
+      <div className="app">
+        <div className="empty">
+          <h3>Cargando…</h3>
+          <p>Conectando con Firebase</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app">
+      <header>
+        <div className="brand">
+          <h1>Cheques</h1>
+          <div className="sub">GC Climatización · Control de Pagos</div>
+        </div>
+        <div className="header-actions">
+          <button onClick={exportarExcel}>↓ Exportar Excel</button>
+          <button className="primary" onClick={abrirNuevo}>+ Nuevo Pago</button>
+        </div>
+      </header>
+
+      <div className="stats">
+        <div className="stat amber">
+          <div className="label">Por Cobrar</div>
+          <div className="value">{fmtCLP(stats.totalPendiente)}</div>
+          <div className="meta">{stats.chequesPendientes} cheque{stats.chequesPendientes !== 1 ? 's' : ''} pendiente{stats.chequesPendientes !== 1 ? 's' : ''}</div>
+        </div>
+        <div className="stat green">
+          <div className="label">Cobrado</div>
+          <div className="value">{fmtCLP(stats.totalCobrado)}</div>
+          <div className="meta">{stats.chequesCobrados} cheque{stats.chequesCobrados !== 1 ? 's' : ''}</div>
+        </div>
+        <div className="stat" style={{borderLeftColor: stats.totalVencido > 0 ? 'var(--red)' : 'var(--ink)'}}>
+          <div className="label">Vencidos</div>
+          <div className="value" style={{color: stats.totalVencido > 0 ? 'var(--red)' : 'var(--ink)'}}>{fmtCLP(stats.totalVencido)}</div>
+          <div className="meta">No cobrados a la fecha</div>
+        </div>
+        <div className="stat">
+          <div className="label">Total General</div>
+          <div className="value">{fmtCLP(stats.totalCobrado + stats.totalPendiente)}</div>
+          <div className="meta">{pagos.length} pago{pagos.length !== 1 ? 's' : ''} registrado{pagos.length !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+
+      <div className="toolbar">
+        <input
+          type="text"
+          placeholder="Buscar beneficiario, concepto, nº cheque…"
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+          style={{flex: '1 1 200px'}}
+        />
+        <input
+          type="month"
+          value={filtroMes}
+          onChange={e => setFiltroMes(e.target.value)}
+          title="Filtrar por mes de cobro"
+        />
+        <div className="filter-group">
+          {['todos', 'pendiente', 'cobrado', 'vencido'].map(f => (
+            <button
+              key={f}
+              className={filtroEstado === f ? 'active' : ''}
+              onClick={() => setFiltroEstado(f)}
+            >{f.charAt(0).toUpperCase() + f.slice(1)}</button>
+          ))}
+        </div>
+      </div>
+
+      {pagosFiltrados.length === 0 ? (
+        <div className="empty">
+          <h3>{pagos.length === 0 ? 'Sin pagos registrados' : 'No hay resultados'}</h3>
+          <p>{pagos.length === 0 ? 'Crea tu primer pago con el botón "+ Nuevo Pago".' : 'Prueba con otros filtros.'}</p>
+        </div>
+      ) : (
+        <div className="list">
+          {pagosFiltrados.map(p => (
+            <PagoCard
+              key={p.id}
+              pago={p}
+              expandido={expandidos.has(p.id)}
+              onToggle={() => toggleExpand(p.id)}
+              onEditar={() => abrirEditar(p)}
+              onEliminar={() => eliminarPago(p.id)}
+              onCambiarEstado={(idx, est) => cambiarEstadoCuota(p, idx, est)}
+              onEditarCuota={(idx, campo, valor) => editarCuota(p, idx, campo, valor)}
+            />
+          ))}
+        </div>
+      )}
+
+      {modalAbierto && (
+        <ModalPago
+          pago={pagoEditar}
+          onGuardar={guardarPago}
+          onCerrar={() => { setModalAbierto(false); setPagoEditar(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ===== Card de Pago =====
+function PagoCard({ pago, expandido, onToggle, onEditar, onEliminar, onCambiarEstado, onEditarCuota }) {
+  const cuotas = pago.cuotas || [];
+  const cobradas = cuotas.filter(c => c.estado === 'cobrado').length;
+  const total = cuotas.reduce((a, c) => a + Number(c.monto || 0), 0);
+  const cobrado = cuotas.filter(c => c.estado === 'cobrado').reduce((a, c) => a + Number(c.monto || 0), 0);
+  const pct = cuotas.length ? (cobradas / cuotas.length) * 100 : 0;
+  const completo = cuotas.length > 0 && cobradas === cuotas.length;
+
+  return (
+    <div className="card">
+      <div className="card-head" onClick={onToggle}>
+        <div className="card-info">
+          <h3>{pago.beneficiario || 'Sin beneficiario'}</h3>
+          {pago.concepto && <div className="desc">{pago.concepto}</div>}
+        </div>
+        <div className="card-amount">{fmtCLP(total)}</div>
+        <div className="progress">
+          {cobradas}/{cuotas.length} cheques
+          <div className="progress-bar"><div className="progress-bar-fill" style={{width: `${pct}%`}} /></div>
+        </div>
+        <span className={`badge ${completo ? 'cobrado' : 'pendiente'}`}>
+          {completo ? '✓ Completo' : `${fmtCLP(total - cobrado)} pend.`}
+        </span>
+      </div>
+
+      {expandido && (
+        <div className="card-body">
+          <div className="quotas">
+            {cuotas.map((c, i) => {
+              const vencido = estaVencido(c.fechaCobro, c.estado);
+              const cls = c.estado === 'cobrado' ? 'cobrado' : (vencido ? 'vencido' : '');
+              return (
+                <div key={i} className={`quota ${cls}`}>
+                  <div className="num">{i + 1}/{cuotas.length}</div>
+                  <div className="field">
+                    <span className="field-label">Cheque · Banco</span>
+                    <span className="field-value">
+                      <input
+                        type="text"
+                        defaultValue={c.numeroCheque || ''}
+                        placeholder="Nº cheque"
+                        onBlur={e => e.target.value !== (c.numeroCheque || '') && onEditarCuota(i, 'numeroCheque', e.target.value)}
+                        style={{background: 'transparent', border: 'none', width: '90px', font: 'inherit'}}
+                      />
+                      <span style={{color: 'var(--ink-mute)'}}> · </span>
+                      <input
+                        type="text"
+                        defaultValue={c.banco || ''}
+                        placeholder="Banco"
+                        onBlur={e => e.target.value !== (c.banco || '') && onEditarCuota(i, 'banco', e.target.value)}
+                        style={{background: 'transparent', border: 'none', width: '100px', font: 'inherit'}}
+                      />
+                    </span>
+                  </div>
+                  <div className="field">
+                    <span className="field-label">Monto</span>
+                    <span className="field-value amount">{fmtCLP(c.monto)}</span>
+                  </div>
+                  <div className="field">
+                    <span className="field-label">{c.estado === 'cobrado' ? 'Cobrado el' : 'Fecha cobro'}</span>
+                    <span className="field-value">
+                      {c.estado === 'cobrado'
+                        ? fmtFecha(c.fechaCobroReal || c.fechaCobro)
+                        : (
+                          <input
+                            type="date"
+                            defaultValue={c.fechaCobro || ''}
+                            onBlur={e => e.target.value !== (c.fechaCobro || '') && onEditarCuota(i, 'fechaCobro', e.target.value)}
+                            style={{background: 'transparent', border: 'none', font: 'inherit'}}
+                          />
+                        )}
+                    </span>
+                  </div>
+                  <span className={`badge ${c.estado === 'cobrado' ? 'cobrado' : (vencido ? 'vencido' : 'pendiente')}`}>
+                    {c.estado === 'cobrado' ? '✓ Cobrado' : (vencido ? 'Vencido' : 'Pendiente')}
+                  </span>
+                  <button
+                    className="icon-btn"
+                    onClick={() => onCambiarEstado(i, c.estado === 'cobrado' ? 'pendiente' : 'cobrado')}
+                    title={c.estado === 'cobrado' ? 'Marcar pendiente' : 'Marcar cobrado'}
+                  >{c.estado === 'cobrado' ? '↺' : '✓'}</button>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16}}>
+            <button className="ghost" onClick={onEditar}>✎ Editar pago</button>
+            <button className="danger" onClick={onEliminar}>Eliminar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== Modal de Creación / Edición =====
+function ModalPago({ pago, onGuardar, onCerrar }) {
+  const editando = !!pago;
+  const [beneficiario, setBeneficiario] = useState(pago?.beneficiario || '');
+  const [concepto, setConcepto] = useState(pago?.concepto || '');
+  const [numCheques, setNumCheques] = useState(pago?.cuotas?.length || 1);
+  const [montoTotal, setMontoTotal] = useState(
+    pago ? pago.cuotas.reduce((a, c) => a + Number(c.monto || 0), 0) : ''
+  );
+  const [fechaPrimerCobro, setFechaPrimerCobro] = useState(
+    pago?.cuotas?.[0]?.fechaCobro || hoyISO()
+  );
+  const [intervaloMeses, setIntervaloMeses] = useState(1);
+  const [cuotas, setCuotas] = useState(
+    pago?.cuotas || [{ numeroCheque: '', banco: '', monto: 0, fechaCobro: hoyISO(), estado: 'pendiente' }]
+  );
+  const [modoAvanzado, setModoAvanzado] = useState(editando);
+
+  // Generar cuotas automáticamente desde el modo simple
+  const generarCuotas = () => {
+    const n = Math.max(1, parseInt(numCheques) || 1);
+    const total = Number(montoTotal) || 0;
+    const montoPorCheque = Math.round(total / n);
+    const ajusteUltimo = total - (montoPorCheque * (n - 1));
+    const base = new Date(fechaPrimerCobro + 'T12:00:00');
+    const nuevas = [];
+    for (let i = 0; i < n; i++) {
+      const fecha = new Date(base);
+      fecha.setMonth(fecha.getMonth() + i * intervaloMeses);
+      nuevas.push({
+        numeroCheque: '',
+        banco: '',
+        monto: i === n - 1 ? ajusteUltimo : montoPorCheque,
+        fechaCobro: fecha.toISOString().split('T')[0],
+        estado: 'pendiente'
+      });
+    }
+    setCuotas(nuevas);
+    setModoAvanzado(true);
+  };
+
+  const actualizarCuota = (idx, campo, valor) => {
+    setCuotas(prev => prev.map((c, i) => i === idx ? { ...c, [campo]: valor } : c));
+  };
+
+  const handleGuardar = () => {
+    if (!beneficiario.trim()) { alert('El beneficiario es obligatorio.'); return; }
+    if (cuotas.length === 0) { alert('Debe haber al menos un cheque.'); return; }
+
+    const cuotasLimpias = cuotas.map(c => ({
+      numeroCheque: (c.numeroCheque || '').trim(),
+      banco: (c.banco || '').trim(),
+      monto: Number(c.monto) || 0,
+      fechaCobro: c.fechaCobro || '',
+      estado: c.estado || 'pendiente',
+      ...(c.fechaCobroReal ? { fechaCobroReal: c.fechaCobroReal } : {})
+    }));
+
+    onGuardar({
+      beneficiario: beneficiario.trim(),
+      concepto: concepto.trim(),
+      cuotas: cuotasLimpias
+    });
+  };
+
+  return (
+    <div className="modal-bg" onClick={onCerrar}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2>{editando ? 'Editar pago' : 'Nuevo pago'}</h2>
+          <button className="ghost" onClick={onCerrar}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="form-grid">
+            <div className="field-group full">
+              <label>Beneficiario · Persona o empresa</label>
+              <input type="text" value={beneficiario} onChange={e => setBeneficiario(e.target.value)} placeholder="Ej: Ferretería Magallanes Ltda." />
+            </div>
+            <div className="field-group full">
+              <label>Concepto / Descripción</label>
+              <textarea value={concepto} onChange={e => setConcepto(e.target.value)} placeholder="Compra de materiales, mano de obra, etc." />
+            </div>
+
+            {!modoAvanzado && !editando && (
+              <>
+                <div className="field-group">
+                  <label>Monto Total</label>
+                  <input type="number" value={montoTotal} onChange={e => setMontoTotal(e.target.value)} placeholder="0" />
+                </div>
+                <div className="field-group">
+                  <label>Nº de Cheques</label>
+                  <input type="number" min="1" value={numCheques} onChange={e => setNumCheques(e.target.value)} />
+                </div>
+                <div className="field-group">
+                  <label>Fecha primer cobro</label>
+                  <input type="date" value={fechaPrimerCobro} onChange={e => setFechaPrimerCobro(e.target.value)} />
+                </div>
+                <div className="field-group">
+                  <label>Intervalo (meses)</label>
+                  <select value={intervaloMeses} onChange={e => setIntervaloMeses(Number(e.target.value))}>
+                    <option value={1}>1 mes</option>
+                    <option value={2}>2 meses</option>
+                    <option value={3}>3 meses</option>
+                    <option value={0}>Mismo día</option>
+                  </select>
+                </div>
+                <div className="full">
+                  <button className="primary" onClick={generarCuotas} style={{width: '100%'}}>
+                    Generar {numCheques} cheque{numCheques !== '1' ? 's' : ''} →
+                  </button>
+                </div>
+              </>
+            )}
+
+            {modoAvanzado && (
+              <div className="full">
+                <label style={{fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--ink-mute)', marginBottom: 12, display: 'block'}}>
+                  Cheques ({cuotas.length})
+                </label>
+                <div style={{display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 360, overflowY: 'auto'}}>
+                  {cuotas.map((c, i) => (
+                    <div key={i} style={{display: 'grid', gridTemplateColumns: '40px 1fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'center', background: 'var(--bg-elev)', padding: 10, borderRadius: 6}}>
+                      <div style={{fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600, color: 'var(--ink-soft)'}}>{i+1}/{cuotas.length}</div>
+                      <input type="text" placeholder="Nº cheque" value={c.numeroCheque || ''} onChange={e => actualizarCuota(i, 'numeroCheque', e.target.value)} style={{padding: '6px 8px', fontSize: 12}} />
+                      <input type="text" placeholder="Banco" value={c.banco || ''} onChange={e => actualizarCuota(i, 'banco', e.target.value)} style={{padding: '6px 8px', fontSize: 12}} />
+                      <input type="number" placeholder="Monto" value={c.monto || ''} onChange={e => actualizarCuota(i, 'monto', e.target.value)} style={{padding: '6px 8px', fontSize: 12}} />
+                      <input type="date" value={c.fechaCobro || ''} onChange={e => actualizarCuota(i, 'fechaCobro', e.target.value)} style={{padding: '6px 8px', fontSize: 12}} />
+                      <button
+                        className="icon-btn danger"
+                        onClick={() => setCuotas(prev => prev.filter((_, idx) => idx !== i))}
+                        title="Quitar"
+                        disabled={cuotas.length <= 1}
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display: 'flex', justifyContent: 'space-between', marginTop: 12, alignItems: 'center'}}>
+                  <button onClick={() => setCuotas(prev => [...prev, { numeroCheque: '', banco: '', monto: 0, fechaCobro: hoyISO(), estado: 'pendiente' }])}>
+                    + Añadir cheque
+                  </button>
+                  <div style={{fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600}}>
+                    Total: {fmtCLP(cuotas.reduce((a, c) => a + Number(c.monto || 0), 0))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="modal-foot">
+          <button className="ghost" onClick={onCerrar}>Cancelar</button>
+          <button className="primary" onClick={handleGuardar} disabled={!modoAvanzado && !editando}>
+            {editando ? 'Guardar cambios' : 'Crear pago'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
